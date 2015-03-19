@@ -1,5 +1,5 @@
 # Dfa-go
->Dfa-go is a Deterministic Finite Automation algorithm for golang
+>Dfa-go is a Deterministic Finite Automation algorithm for golang.This program is for filter some text if it is a lllegal words.
 
 ### Example
 ```go
@@ -12,11 +12,12 @@ import (
 )
 func main() {
     arr := []string{
-        "你的微信号是多少？",
-        "你的微博号是多少？",
-        "你的QQ号是多少？",
-        "画的不错！",
+        "我的微信请联系我吧",
+        "我的微信号123456789请联系我吧",
         "加我微信1235445",
+        "加我wechat",
+        "我的微 信 123565656fdsaf，联系我吧",
+        "画的不错！这位同学",
     }
 
     d := new(Dfa)
@@ -30,19 +31,41 @@ func main() {
     }
 }
 
+
 ``` 
 
 ### Output
-```text
-原字符串： 你的微信号是多少？ ，结果： true
-原字符串： 你的微博号是多少？ ，结果： true
-原字符串： 你的QQ号是多少？ ，结果： true
-原字符串： 画的不错！ ，结果： false
-原字符串： 加我微信1235445 ，结果： true
-过滤字符串
-原字符串： 你的微信号是多少？ ，结果： 你的**号是多少？
-原字符串： 你的微博号是多少？ ，结果： 你的**号是多少？
-原字符串： 你的QQ号是多少？ ，结果： 你的**号是多少？
-原字符串： 画的不错！ ，结果： 画的不错！
-原字符串： 加我微信1235445 ，结果： 加我**1235445
+```txt
+Original： 我的微信请联系我吧 ，Result： true
+Original： 我的微信号123456789请联系我吧 ，Result： true
+Original： 加我微信1235445 ，Result： true
+Original： 加我wechat ，Result： true
+Original： 我的微 信 123565656fdsaf，联系我吧 ，Result： true
+Original： 画的不错！这位同学 ，Result： false
+--------Filter And Replace words---------
+Original： 我的微信请联系我吧 ，Result： 我的**请联系我吧
+Original： 我的微信号123456789请联系我吧 ，Result： 我的************请联系我吧
+Original： 加我微信1235445 ，Result： 加我*********
+Original： 加我wechat ，Result： 加我******
+Original： 我的微 信 123565656fdsaf，联系我吧 ，Result： 我的******************，联系我吧
+Original： 画的不错！这位同学 ，Result： 画的不错！这位同学
 ```
+
+### Lllegal Words
+>微.信.
+
+>微 信
+
+>微　信
+　
+>微.信.号R[\d\w]+R
+
+>微信
+
+>微信号R[\d\w]+R
+
+>微信R[\d\w]+R
+
+>微 信 R[\d\w]+R
+
+>wechat

@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
 type Node struct {
 	childrens map[string]*Node
 	terminate bool
+	reg       *regexp.Regexp
+	parent    *Node
 }
 
 type Dfa struct {
@@ -22,16 +25,34 @@ func (p *Dfa) addWord(word string) {
 	node := &p.root
 	str := []rune(word)
 	lastPos := len(str) - 1
+	recordingFlag := false
+	tempRegx := ""
 	for i, s := range str {
 		sKey := string(s)
-		if node.childrens[sKey] == nil {
-			node.childrens[sKey] = &Node{map[string]*Node{}, i == lastPos}
+		if sKey == "R" {
+			if recordingFlag == false {
+				recordingFlag = true
+				continue
+			} else {
+				node.childrens["regex"] = &Node{map[string]*Node{}, i == lastPos, regexp.MustCompile(tempRegx), node}
+				recordingFlag = false
+			}
+			tempRegx = ""
+			node = node.childrens["regex"]
 		} else {
-			if i == lastPos {
-				node.childrens[sKey] = &Node{map[string]*Node{}, true}
+			if recordingFlag {
+				tempRegx += sKey
+			} else {
+				if node.childrens[sKey] == nil {
+					node.childrens[sKey] = &Node{map[string]*Node{}, i == lastPos, nil, node}
+				} else {
+					if i == lastPos {
+						node.childrens[sKey] = &Node{node.childrens[sKey].childrens, true, nil, node}
+					}
+				}
+				node = node.childrens[sKey]
 			}
 		}
-		node = node.childrens[sKey]
 	}
 }
 
@@ -44,7 +65,7 @@ func (p *Dfa) BuildTree(filename string) {
 		fmt.Println(err.Error())
 		return
 	}
-	p.root = Node{map[string]*Node{}, false}
+	p.root = Node{map[string]*Node{}, false, nil, nil}
 
 	r := bufio.NewReader(f)
 	s, e := readln(r)
@@ -74,26 +95,41 @@ func (p *Dfa) IsContain(text string) bool {
 	str := []rune(text)
 	strLen := len(str)
 	for i, _ := range str {
-		j := i
 		node := &p.root
-		for j < strLen {
+		for j := i; j < strLen && node != nil; j++ {
 			currentWord := string(str[j])
 			if node.childrens[currentWord] == nil {
-				break
+				if node.childrens["regex"] == nil {
+					break
+				} else {
+					str := getLastString(str, j)
+					pos := node.childrens["regex"].reg.FindStringIndex(str)
+					if pos != nil {
+						j = pos[1] + j
+						if node.childrens["regex"].terminate {
+							return true
+						} else if pos[0] == pos[1] {
+							j--
+						}
+					} else {
+						break
+					}
+					node = node.childrens["regex"]
+				}
 			} else {
 				if node.childrens[currentWord].terminate {
 					return true
 				}
 				node = node.childrens[currentWord]
 			}
-			j++
 		}
 	}
 	return false
 }
 
-// 过滤关键词，替换为“*”
+// 过滤关键词
 // @text 输入文本
+// @replaceChar 替换的字符
 func (p *Dfa) FilterWords(text, replaceChar string) string {
 	str := []rune(text)
 	strLen := len(str)
@@ -102,19 +138,63 @@ func (p *Dfa) FilterWords(text, replaceChar string) string {
 	isAppend := true
 	for i := 0; i < strLen; i++ {
 		node := &p.root
-		for j := i; j < strLen && len(node.childrens) > 0; j++ {
+		tryTimes := 0
+		for j := i; j < strLen && node != nil; j++ {
 			currentWord := string(str[j])
 			if node.childrens[currentWord] == nil {
-				break
+				if node.childrens["regex"] == nil {
+					if tryTimes == 1 {
+						tryTimes = 2
+						node = node.parent
+						j -= 2
+					} else {
+						break
+					}
+				} else {
+					str := getLastString(str, j)
+					pos := node.childrens["regex"].reg.FindStringIndex(str)
+					if pos != nil {
+						j = pos[1] + j
+						if node.childrens["regex"].terminate {
+							if len(node.childrens["regex"].childrens) > 0 && tryTimes == 0 {
+								tryTimes = 1
+							} else {
+								isAppend = false
+								temp := []string{}
+								for k := 0; k < j-i; k++ {
+									temp = append(temp, replaceChar)
+								}
+								strs = append(strs, strings.Join(temp, ""))
+								i = j - 1
+							}
+						} else if pos[0] == pos[1] {
+							j--
+						}
+					} else {
+						if tryTimes == 1 {
+							tryTimes = 2
+							node = node.parent
+							j -= 2
+							continue
+						} else {
+							break
+						}
+					}
+					node = node.childrens["regex"]
+				}
 			} else {
 				if node.childrens[currentWord].terminate {
-					isAppend = false
-					temp := []string{}
-					for k := 0; k < j-i+1; k++ {
-						temp = append(temp, replaceChar)
+					if len(node.childrens[currentWord].childrens) > 0 && tryTimes == 0 {
+						tryTimes = 1
+					} else {
+						isAppend = false
+						temp := []string{}
+						for k := 0; k < j-i+1; k++ {
+							temp = append(temp, replaceChar)
+						}
+						strs = append(strs, strings.Join(temp, ""))
+						i = j
 					}
-					strs = append(strs, strings.Join(temp, ""))
-					i = j
 				}
 				node = node.childrens[currentWord]
 			}
@@ -126,4 +206,14 @@ func (p *Dfa) FilterWords(text, replaceChar string) string {
 		}
 	}
 	return strings.Join(strs, "")
+}
+
+func getLastString(strs []rune, j int) string {
+	str := []string{}
+	for i, s := range strs {
+		if i >= j {
+			str = append(str, string(s))
+		}
+	}
+	return strings.Join(str, "")
 }
